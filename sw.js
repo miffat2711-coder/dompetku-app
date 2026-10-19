@@ -19,6 +19,11 @@ self.addEventListener('install', event => {
 
 // Mengambil file dari memori saat offline
 self.addEventListener('fetch', event => {
+  // BARU: Jangan cegat permintaan POST atau komunikasi ke API Google Script
+  if (event.request.method !== 'GET' || event.request.url.includes('script.google.com')) {
+    return; // Biarkan browser yang menanganinya secara normal
+  }
+
   event.respondWith(
     caches.match(event.request).then(response => {
       // Kembalikan versi memori jika ada, jika tidak ambil dari internet
