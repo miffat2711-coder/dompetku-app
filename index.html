@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>DompetKu - Aplikasi Pencatatan Keuangan (File Lokal)</title>
+  <!-- Kami menggunakan CDN, pastikan Anda pernah membuka file ini saat online satu kali agar Bootstrap dapat tersimpan di cache browser Anda -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+<link rel="manifest" href="manifest.json">
+  <style>
+    body { background-color: #f4f7f6; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    .nav-brand-logo { color: #2e7d32; font-weight: bold; }
+    .card-summary { border: none; border-radius: 12px; color: #fff;}
+    .card-income { background: linear-gradient(135deg, #66bb6a, #43a047); }
+    .card-expense { background: linear-gradient(135deg, #ef5350, #e53935); }
+    .card-balance { background: linear-gradient(135deg, #26a69a, #00897b); }
+    .card-main { border: none; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+    .btn-custom { background-color: #2e7d32; border: none; color: white; }
+    .btn-custom:hover { background-color: #1b5e20; color: white; }
+    .table-container { max-height: 400px; overflow-y: auto; }
+    .offline-badge { background-color: #ff9800; color: white; font-weight: bold; }
+    .online-badge { background-color: #2e7d32; color: white; font-weight: bold; }
+    .spin { animation: spin 1s linear infinite; }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navigation -->
+  <nav class="navbar navbar-light bg-white shadow-sm mb-3">
+    <div class="container d-flex justify-content-between align-items-center">
+      <span class="navbar-brand mb-0 h1 d-flex align-items-center gap-2">
+        <i class="bi bi-wallet2 text-success" style="font-size: 1.5rem;"></i>
+        <span class="nav-brand-logo">DompetKu</span>
+      </span>
+      <span id="statusKoneksi" class="badge online-badge p-2">
+        <i class="bi bi-cloud-check-fill"></i> Terhubung ke Internet (Cloud)
+      </span>
+    </div>
+  </nav>
+
+  <div class="container mb-5">
+    
+    <!-- Banner Status Offline / Auto Sync -->
+    <div id="bannerAutoSync" class="alert alert-warning d-flex justify-content-between align-items-center d-none" role="alert">
+      <div id="syncMessage">
+        <i class="bi bi-wifi-off me-2"></i>
+        <span><strong>Mode Offline Aktif!</strong> Transaksi baru akan disimpan di perangkat ini dan akan otomatis sinkron saat online.</span>
+      </div>
+      <div id="syncSpinner" class="d-none text-end">
+        <i class="bi bi-arrow-repeat spin fs-5"></i> <span class="ms-1 small fw-bold">Menyinkronkan...</span>
+      </div>
+    </div>
+
+    <!-- Ringkasan Saldo -->
+    <div class="row g-3 mb-4">
+      <div class="col-md-4">
+        <div class="card card-summary card-income p-3">
+          <small>Total Pemasukan</small>
+          <h3 id="dash-pemasukan" class="mb-0 fw-bold">Rp 0</h3>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card card-summary card-expense p-3">
+          <small>Total Pengeluaran</small>
+          <h3 id="dash-pengeluaran" class="mb-0 fw-bold">Rp 0</h3>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card card-summary card-balance p-3">
+          <small>Sisa Saldo</small>
+          <h3 id="dash-saldo" class="mb-0 fw-bold">Rp 0</h3>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-4">
+      <!-- Sisi Kiri: Form -->
+      <div class="col-lg-4">
+        <div class="card card-main p-4 bg-white">
+          <h5 class="fw-bold mb-3 text-dark"><i class="bi bi-plus-circle me-2"></i>Tambah Transaksi</h5>
+          <form id="formTransaksi" onsubmit="handleFormSubmit(event)">
+            
+            <div class="mb-3">
+              <label class="form-label small fw-semibold">Tanggal</label>
+              <input type="date" id="tanggal" class="form-control" required>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label small fw-semibold">Jenis Transaksi</label>
+              <select id="jenis" class="form-select" onchange="updateKategori()" required>
+                <option value="Pengeluaran">Pengeluaran</option>
+                <option value="Pemasukan">Pemasukan</option>
+              </select>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label small fw-semibold">Kategori</label>
+              <select id="kategori" class="form-select" required></select>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label small fw-semibold">Nominal (Rp)</label>
+              <input type="number" id="nominal" class="form-control" placeholder="Contoh: 50000" min="1" required>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label small fw-semibold">Metode / Dompet</label>
+              <select id="dompet" class="form-select" required>
+                <option value="Tunai">Tunai</option>
+                <option value="BCA">BCA</option>
+                <option value="Mandiri">Mandiri</option>
+                <option value="OVO">OVO</option>
+                <option value="GoPay">GoPay</option>
+              </select>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label small fw-semibold">Keterangan</label>
+              <textarea id="keterangan" class="form-control" rows="2" placeholder="Detail transaksi..."></textarea>
+            </div>
+
+            <button type="submit" id="btnSimpan" class="btn btn-custom w-100 py-2 fw-semibold">
+              <span id="btnText">Simpan Transaksi</span>
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Sisi Kanan: Tabel -->
+      <div class="col-lg-8">
+        <div class="card card-main p-4 bg-white h-100">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="fw-bold mb-0 text-dark"><i class="bi bi-clock-history me-2"></i>Riwayat Transaksi Terakhir</h5>
+            <button class="btn btn-outline-secondary btn-sm" onclick="loadDashboardData()">
+              <i class="bi bi-arrow-clockwise"></i> Refresh
+            </button>
+          </div>
+          
+          <div class="table-responsive table-container">
+            <table class="table table-hover align-middle">
+              <thead class="table-light">
+                <tr>
+                  <th>Tanggal</th>
+                  <th>Jenis</th>
+                  <th>Kategori</th>
+                  <th>Jumlah</th>
+                  <th>Dompet</th>
+                  <th>Keterangan / Status</th>
+                </tr>
+              </thead>
+              <tbody id="tabelRiwayat">
+                <tr>
+                  <td colspan="6" class="text-center text-muted">Mencoba terhubung...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notification Toast -->
+  <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 11">
+    <div id="toastApp" class="toast align-items-center text-white border-0" role="alert">
+      <div class="d-flex">
+        <div id="toastMessage" class="toast-body"></div>
+        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js')
+      .then(reg => console.log('Service Worker terdaftar'))
+      .catch(err => console.log('Service Worker gagal', err));
+  });
+}
+    // MASUKKAN URL WEB APP GOOGLE SCRIPT ANDA DI SINI
+    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyMCmnpJtXP_qurJNvL1-3WIzF-MRjGfxfQXXgGNL81cucLoLr02-7ineE1HoZ80mTbNg/exec"; 
+
+    document.getElementById('tanggal').value = new Date().toISOString().substring(0, 10);
+
+    const kategoriMap = {
+      Pemasukan: ["Gaji", "Bonus", "Investasi", "Penjualan", "Hibah/Hadiah", "Lainnya"],
+      Pengeluaran: ["Makan & Minum", "Belanja Bulanan", "Transportasi", "Tagihan & Utilitas", "Hiburan", "Kesehatan", "Pendidikan", "Amal/Donasi", "Lainnya"]
+    };
+
+    function updateKategori() {
+      const jenis = document.getElementById("jenis").value;
+      const kategoriSelect = document.getElementById("kategori");
+      kategoriSelect.innerHTML = "";
+      kategoriMap[jenis].forEach(kat => {
+        let opt = document.createElement("option");
+        opt.value = kat;
+        opt.innerText = kat;
+        kategoriSelect.appendChild(opt);
+      });
+    }
+
+    updateKategori();
+
+    function getOfflineData() {
+      return JSON.parse(localStorage.getItem("offline_transactions")) || [];
+    }
+
+    function saveOfflineData(data) {
+      const current = getOfflineData();
+      current.push(data);
+      localStorage.setItem("offline_transactions", JSON.stringify(current));
+    }
+
+    function clearOfflineData() {
+      localStorage.removeItem("offline_transactions");
+    }
+
+    let isSyncing = false;
+
+    // Cek Status Jaringan Browser
+    function checkConnection() {
+      const isOnline = navigator.onLine;
+      const statusBadge = document.getElementById("statusKoneksi");
+      const bannerAutoSync = document.getElementById("bannerAutoSync");
+      const syncMessage = document.getElementById("syncMessage");
+      const btnSimpanText = document.getElementById("btnText");
+
+      if (isOnline) {
+        statusBadge.className = "badge online-badge p-2";
+        statusBadge.innerHTML = `<i class="bi bi-cloud-check-fill"></i> Terhubung ke Internet`;
+        
+        const offlineCount = getOfflineData().length;
+        if (offlineCount > 0) {
+          bannerAutoSync.classList.remove("d-none");
+          bannerAutoSync.className = "alert alert-info d-flex justify-content-between align-items-center";
+          syncMessage.innerHTML = `<i class="bi bi-arrow-repeat spin me-2"></i><strong>Online Kembali!</strong> Ditemukan ${offlineCount} data lokal baru. Mengunggah ke Google Sheets...`;
+          autoUploadOfflineData();
+        } else {
+          bannerAutoSync.classList.add("d-none");
+          btnSimpanText.innerText = "Simpan Transaksi";
+        }
+      } else {
+        statusBadge.className = "badge offline-badge p-2";
+        statusBadge.innerHTML = `<i class="bi bi-cloud-slash-fill"></i> Offline (Penyimpanan HP/Laptop)`;
+        
+        bannerAutoSync.classList.remove("d-none");
+        bannerAutoSync.className = "alert alert-warning d-flex justify-content-between align-items-center";
+        syncMessage.innerHTML = `<i class="bi bi-wifi-off me-2"></i><strong>Mode Offline!</strong> Data akan disimpan di perangkat ini dan terunggah otomatis saat internet kembali.`;
+        
+        btnSimpanText.innerText = "Simpan Offline";
+      }
+    }
+
+    window.addEventListener('online', checkConnection);
+    window.addEventListener('offline', checkConnection);
+
+    window.onload = function() {
+      checkConnection();
+      loadDashboardData();
+      
+      setInterval(() => {
+        if (navigator.onLine && getOfflineData().length > 0 && !isSyncing) {
+          autoUploadOfflineData();
+        }
+      }, 10000);
+    };
+
+    // Auto Sync dari Local Ke Google Sheets (Menggunakan POST fetch)
+    function autoUploadOfflineData() {
+      if (isSyncing || !navigator.onLine) return;
+      
+      const offlineQueue = getOfflineData();
+      if (offlineQueue.length === 0) return;
+
+      isSyncing = true;
+      document.getElementById("syncSpinner").classList.remove("d-none");
+
+      // Mengirimkan lewat POST Request (Bypass google.script.run)
+      fetch(WEB_APP_URL, {
+        method: "POST",
+        mode: "cors",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ action: "simpanBanyak", data: offlineQueue })
+      })
+      .then(response => response.json())
+      .then(result => {
+        isSyncing = false;
+        document.getElementById("syncSpinner").classList.add("d-none");
+        if (result.success) {
+          showToast(result.message, "success");
+          clearOfflineData();
+          checkConnection();
+          loadDashboardData();
+        } else {
+          showToast("Gagal menyelaraskan: " + result.error, "danger");
+        }
+      })
+      .catch(err => {
+        isSyncing = false;
+        document.getElementById("syncSpinner").classList.add("d-none");
+      });
+    }
+
+    // Penanganan klik submit form (baik online maupun offline)
+    function handleFormSubmit(e) {
+      e.preventDefault();
+      
+      const btnSimpan = document.getElementById("btnSimpan");
+      const btnText = document.getElementById("btnText");
+      
+      const formData = {
+        tanggal: document.getElementById("tanggal").value,
+        jenis: document.getElementById("jenis").value,
+        kategori: document.getElementById("kategori").value,
+        nominal: document.getElementById("nominal").value,
+        dompet: document.getElementById("dompet").value,
+        keterangan: document.getElementById("keterangan").value
+      };
+
+      if (!navigator.onLine) {
+        saveOfflineData(formData);
+        showToast("Tersimpan di internal browser! (Segera sync saat online)", "warning");
+        resetForm();
+        loadDashboardData();
+        return;
+      }
+
+      btnSimpan.disabled = true;
+      btnText.innerText = "Menyimpan...";
+
+      fetch(WEB_APP_URL, {
+        method: "POST",
+        mode: "cors",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ action: "simpanSatu", data: formData })
+      })
+      .then(response => response.json())
+      .then(result => {
+        btnSimpan.disabled = false;
+        btnText.innerText = "Simpan Transaksi";
+        if (result.success) {
+          showToast(result.message, "success");
+          resetForm();
+          loadDashboardData();
+        } else {
+          showToast("Gagal: " + result.error, "danger");
+        }
+      })
+      .catch(err => {
+        btnSimpan.disabled = false;
+        btnText.innerText = "Simpan Transaksi";
+        saveOfflineData(formData);
+        showToast("Error jaringan, dialihkan ke penyimpanan offline local HP/laptop", "warning");
+        resetForm();
+        loadDashboardData();
+      });
+    }
+
+    function resetForm() {
+      document.getElementById("formTransaksi").reset();
+      document.getElementById('tanggal').value = new Date().toISOString().substring(0, 10);
+      updateKategori();
+    }
+
+    // Ambil Data Dashboard (Menggunakan POST fetch)
+// Ambil Data Dashboard (Dengan Sistem Cache Offline Pintar)
+    function loadDashboardData() {
+      const formatRupiah = (number) => {
+        return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(number);
+      };
+
+      const localData = getOfflineData();
+      
+      // Ambil ingatan data terakhir yang pernah disinkronkan dari Google Sheets
+      const cachedCloudData = JSON.parse(localStorage.getItem("cached_dashboard_data"));
+
+      // KONDISI 1: JIKA SEDANG OFFLINE
+      if (!navigator.onLine) {
+        let dashPemasukan = 0;
+        let dashPengeluaran = 0;
+        let dashSaldo = 0;
+        const tbody = document.getElementById("tabelRiwayat");
+        tbody.innerHTML = "";
+
+        // Jika pernah ada data cloud yang tersimpan, gunakan itu sebagai nilai dasar
+        if (cachedCloudData) {
+          dashPemasukan = cachedCloudData.pemasukan;
+          dashPengeluaran = cachedCloudData.pengeluaran;
+          dashSaldo = cachedCloudData.saldo;
+        }
+
+        // Kalkulasikan saldo dasar dengan transaksi offline baru yang belum terkirim
+        localData.forEach(item => {
+          let nom = parseFloat(item.nominal);
+          if (item.jenis === "Pemasukan") {
+            dashPemasukan += nom;
+            dashSaldo += nom;
+          } else {
+            dashPengeluaran += nom;
+            dashSaldo -= nom;
+          }
+        });
+
+        // Tampilkan Saldo Kalkulasi Offline
+        document.getElementById("dash-pemasukan").innerText = formatRupiah(dashPemasukan);
+        document.getElementById("dash-pengeluaran").innerText = formatRupiah(dashPengeluaran);
+        document.getElementById("dash-saldo").innerText = formatRupiah(dashSaldo);
+
+        if (!cachedCloudData && localData.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4"><i class="bi bi-wifi-off"></i> Offline. Belum ada riwayat tersimpan.</td></tr>';
+          return;
+        }
+
+        // Cetak transaksi antrean offline di urutan paling atas
+        localData.reverse().forEach(item => {
+          let badgeJenis = item.jenis === "Pemasukan" ? `<span class="badge bg-success-subtle text-success">Pemasukan</span>` : `<span class="badge bg-danger-subtle text-danger">Pengeluaran</span>`;
+          tbody.innerHTML += `
+            <tr class="table-warning">
+              <td>${item.tanggal.split("-").reverse().join("/")}</td>
+              <td>${badgeJenis}</td>
+              <td>${item.kategori}</td>
+              <td class="${item.jenis === 'Pemasukan' ? 'text-success' : 'text-danger'} fw-semibold">${(item.jenis === "Pemasukan" ? "+ " : "- ") + formatRupiah(item.nominal)}</td>
+              <td><span class="badge bg-light text-dark border">${item.dompet}</span></td>
+              <td>
+                <span class="badge bg-warning text-dark"><i class="bi bi-clock-fill"></i> Lokal (Offline)</span>
+                <div class="text-muted small">${item.keterangan || "-"}</div>
+              </td>
+            </tr>
+          `;
+        });
+
+        // Cetak riwayat lama dari cloud di bawahnya
+        if (cachedCloudData && cachedCloudData.riwayat) {
+          cachedCloudData.riwayat.forEach(item => {
+            let badgeJenis = item.jenis === "Pemasukan" ? `<span class="badge bg-success-subtle text-success">${item.jenis}</span>` : `<span class="badge bg-danger-subtle text-danger">${item.jenis}</span>`;
+            let colorNominal = item.jenis === "Pemasukan" ? "text-success fw-semibold" : "text-danger fw-semibold";
+            let formattedNominal = (item.jenis === "Pemasukan" ? "+ " : "- ") + formatRupiah(item.jumlah);
+
+            tbody.innerHTML += `
+              <tr class="opacity-75">
+                <td>${item.tanggal}</td>
+                <td>${badgeJenis}</td>
+                <td>${item.kategori}</td>
+                <td class="${colorNominal}">${formattedNominal}</td>
+                <td><span class="badge bg-light text-dark border">${item.dompet}</span></td>
+                <td class="text-secondary small">${item.keterangan || "-"}</td>
+              </tr>
+            `;
+          });
+        }
+        return;
+      }
+
+      // KONDISI 2: JIKA SEDANG ONLINE (Ambil dari Cloud)
+      fetch(WEB_APP_URL, {
+        method: "POST",
+        mode: "cors",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ action: "ambilData" })
+      })
+      .then(response => response.json())
+      .then(response => {
+        // SIMPAN DATA TERBARU KE MEMORI HP UNTUK BEKAL OFFLINE NANTI
+        localStorage.setItem("cached_dashboard_data", JSON.stringify(response));
+
+        document.getElementById("dash-pemasukan").innerText = formatRupiah(response.pemasukan);
+        document.getElementById("dash-pengeluaran").innerText = formatRupiah(response.pengeluaran);
+        document.getElementById("dash-saldo").innerText = formatRupiah(response.saldo);
+
+        const tbody = document.getElementById("tabelRiwayat");
+        tbody.innerHTML = "";
+        
+        if (response.riwayat.length === 0 && localData.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Belum ada transaksi terekam.</td></tr>';
+          return;
+        }
+
+        // Cetak yang masih mengantre offline (jika ada yang belum tereksekusi auto-sync)
+        localData.reverse().forEach(item => {
+          let badgeJenis = item.jenis === "Pemasukan" ? `<span class="badge bg-success-subtle text-success">Pemasukan</span>` : `<span class="badge bg-danger-subtle text-danger">Pengeluaran</span>`;
+          tbody.innerHTML += `
+            <tr class="table-warning">
+              <td>${item.tanggal.split("-").reverse().join("/")}</td>
+              <td>${badgeJenis}</td>
+              <td>${item.kategori}</td>
+              <td class="${item.jenis === 'Pemasukan' ? 'text-success' : 'text-danger'} fw-semibold">${(item.jenis === "Pemasukan" ? "+ " : "- ") + formatRupiah(item.nominal)}</td>
+              <td><span class="badge bg-light text-dark border">${item.dompet}</span></td>
+              <td><span class="badge bg-warning text-dark"><i class="bi bi-cloud-arrow-up-fill"></i> Antrean Sync</span></td>
+            </tr>
+          `;
+        });
+
+        // Tampilkan dari server
+        response.riwayat.forEach(item => {
+          let badgeJenis = item.jenis === "Pemasukan" ? `<span class="badge bg-success-subtle text-success">${item.jenis}</span>` : `<span class="badge bg-danger-subtle text-danger">${item.jenis}</span>`;
+          let colorNominal = item.jenis === "Pemasukan" ? "text-success fw-semibold" : "text-danger fw-semibold";
+          let formattedNominal = (item.jenis === "Pemasukan" ? "+ " : "- ") + formatRupiah(item.jumlah);
+
+          tbody.innerHTML += `
+            <tr>
+              <td>${item.tanggal}</td>
+              <td>${badgeJenis}</td>
+              <td>${item.kategori}</td>
+              <td class="${colorNominal}">${formattedNominal}</td>
+              <td><span class="badge bg-light text-dark border">${item.dompet}</span></td>
+              <td class="text-secondary small">${item.keterangan || "-"}</td>
+            </tr>
+          `;
+        });
+      })
+      .catch(err => {
+        showToast("Gagal memperbarui dashboard dari sheets.", "danger");
+      });
+    }
