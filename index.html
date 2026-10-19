@@ -180,9 +180,8 @@ if ('serviceWorker' in navigator) {
       .catch(err => console.log('Service Worker gagal', err));
   });
 }
-    // MASUKKAN URL WEB APP GOOGLE SCRIPT ANDA DI SINI
-    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyMCmnpJtXP_qurJNvL1-3WIzF-MRjGfxfQXXgGNL81cucLoLr02-7ineE1HoZ80mTbNg/exec"; 
-
+    // PASTIKAN ADA TANDA KUTIP DI AWAL DAN DI AKHIR URL SEPERTI INI:
+const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz.../exec";
     document.getElementById('tanggal').value = new Date().toISOString().substring(0, 10);
 
     const kategoriMap = {
